@@ -156,10 +156,21 @@ class Client
 
             $attempts = $this->deferredResultMaxAttempts;
 
+            $locationHeader = $response->getHeader('location');
+
             while ($attempts > 0) {
+
+                if($locationHeader) {
+                    $url = $this->baseUrl . ltrim($locationHeader,'/');
+                    $query = json_decode($key, true);
+                } else{
+                    $url = $this->baseUrl . "get_deferred_results";
+                    $query = ['deferred_id' => $key];
+                }
+
                 /** @var ResponseInterface $deferredResponse */
                 $deferredResponse = $this->guzzleClient->get(
-                    $this->baseUrl . "get_deferred_results",
+                    $url,
                     [
                         'auth' => [
                             $this->id,
@@ -167,9 +178,7 @@ class Client
                             self::$AUTH_TYPE
                         ],
                         'future' => false,
-                        'query' => [
-                            'deferred_id' => $key
-                        ]
+                        'query' => $query
                     ]
                 );
 
