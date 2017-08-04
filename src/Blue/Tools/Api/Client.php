@@ -167,12 +167,9 @@ class Client
 
             while ($attempts > 0) {
 
-                $url = $this->baseUrl . "get_deferred_results";
-                $query = ['deferred_id' => $key];
-
                 /** @var ResponseInterface $deferredResponse */
                 $deferredResponse = $this->guzzleClient->get(
-                    $url,
+                    $this->baseUrl . "get_deferred_results",
                     [
                         'auth' => [
                             $this->id,
@@ -180,7 +177,7 @@ class Client
                             self::$AUTH_TYPE
                         ],
                         'future' => false,
-                        'query' => $query
+                        'query' => ['deferred_id' => $key]
                     ]
                 );
 
