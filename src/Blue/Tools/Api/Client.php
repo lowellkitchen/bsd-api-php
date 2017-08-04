@@ -156,17 +156,19 @@ class Client
 
             $attempts = $this->deferredResultMaxAttempts;
 
-            $locationHeader = $response->getHeader('location');
+            /**
+             * The mailer/send_triggered_email api method is a non-standard
+             * deferred api call.  It returns a JSON body in the format of
+             * {'mailing_triggered_id': 'deferred-id'}
+             **/
+            if($jsonResponse = json_decode($key, true)){
+                $key = $jsonResponse['mailing_triggered_id'];
+            }
 
             while ($attempts > 0) {
 
-                if($locationHeader) {
-                    $url = $this->baseUrl . ltrim($locationHeader,'/');
-                    $query = json_decode($key, true);
-                } else{
-                    $url = $this->baseUrl . "get_deferred_results";
-                    $query = ['deferred_id' => $key];
-                }
+                $url = $this->baseUrl . "get_deferred_results";
+                $query = ['deferred_id' => $key];
 
                 /** @var ResponseInterface $deferredResponse */
                 $deferredResponse = $this->guzzleClient->get(
