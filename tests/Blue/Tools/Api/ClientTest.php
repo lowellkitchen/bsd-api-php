@@ -1,9 +1,10 @@
 <?php
 namespace Blue\Tools\Api;
 
-use GuzzleHttp\Message\Response;
+use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Stream\Stream;
-use GuzzleHttp\Subscriber\Mock;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
 use InvalidArgumentException;
 use PHPUnit_Framework_TestCase;
 use RuntimeException;
@@ -42,15 +43,15 @@ class ClientTest extends PHPUnit_Framework_TestCase
      */
     public function testGetReady()
     {
-        $client = new Client('someone', 'some_secret', 'http://www.whatever.com');
 
-        $mock = new Mock(
+
+        $mockHandler = new MockHandler(
             [
-                new Response(200, [], Stream::factory('ABC'))
+                new Response(200, [], 'ABC')
             ]
         );
 
-        $client->getGuzzleClient()->getEmitter()->attach($mock);
+        $client = new Client('someone', 'some_secret', 'http://www.whatever.com', $mockHandler);
 
         $response = $client->get('some_path', []);
 
@@ -64,16 +65,15 @@ class ClientTest extends PHPUnit_Framework_TestCase
      */
     public function testPost()
     {
-        $client = new Client('someone', 'some_secret', 'http://www.whatever.com');
 
-        $mock = new Mock(
+
+        $mockHandler = new MockHandler(
             [
-                new Response(200, [], Stream::factory('ABC'))
+                new Response(200, [], 'ABC')
             ]
         );
 
-        $client->getGuzzleClient()->getEmitter()->attach($mock);
-
+        $client = new Client('someone', 'some_secret', 'http://www.whatever.com', $mockHandler);
         $response = $client->post('some_path', [], 'data');
 
         $this->assertEquals('ABC', $response->getBody()->getContents());
@@ -86,19 +86,20 @@ class ClientTest extends PHPUnit_Framework_TestCase
      */
     public function testGetDeferredWithRetries()
     {
-        $client = new Client('someone', 'some_secret', 'http://www.whatever.com');
-        $client->setDeferredResultInterval(0);
 
-        $mock = new Mock(
+
+        $mockHandler = new MockHandler(
             [
-                new Response(202, [], Stream::factory('NOT')),
-                new Response(202, [], Stream::factory('READY')),
-                new Response(202, [], Stream::factory('YET')),
-                new Response(200, [], Stream::factory('Finally!'))
+                new Response(202, [], 'NOT'),
+                new Response(202, [], 'READY'),
+                new Response(202, [], 'YET'),
+                new Response(200, [], 'Finally!')
             ]
         );
 
-        $client->getGuzzleClient()->getEmitter()->attach($mock);
+        $client = new Client('someone', 'some_secret', 'http://www.whatever.com', $mockHandler);
+
+        $client->setDeferredResultInterval(0);
 
         $response = $client->get('some_path', []);
 
@@ -113,22 +114,25 @@ class ClientTest extends PHPUnit_Framework_TestCase
      */
     public function testGetDeferredResultMaxAttemptsReached()
     {
-        $client = new Client('someone', 'some_secret', 'http://www.whatever.com');
-        $client->setDeferredResultInterval(0);
-        $client->setDeferredResultMaxAttempts(2);
 
-        $mock = new Mock(
+
+        $mockHandler = new MockHandler(
             [
-                new Response(202, [], Stream::factory('First attempt')),
-                new Response(202, [], Stream::factory('Second attempt')),
-                new Response(202, [], Stream::factory('Third attempt')),
-                new Response(200, [], Stream::factory('Finally!'))
+                new Response(202, [], 'First attempt'),
+                new Response(202, [], 'Second attempt'),
+                new Response(202, [], 'Third attempt'),
+                new Response(200, [], 'Finally!')
             ]
         );
 
-        $client->getGuzzleClient()->getEmitter()->attach($mock);
+        $client = new Client('someone', 'some_secret', 'http://www.whatever.com', $mockHandler);
+
+        $client->setDeferredResultInterval(0);
+
+        $client->setDeferredResultMaxAttempts(2);
 
         $response = $client->get('some_path', []);
+
         $content = $response->getBody()->getContents();
 
     }

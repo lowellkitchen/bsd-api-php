@@ -1,9 +1,11 @@
 <?php
 namespace Blue\Tools\Api;
 
-use GuzzleHttp\Message\FutureResponse;
-use GuzzleHttp\Message\Response;
-use GuzzleHttp\Message\ResponseInterface;
+use Psr\Http\Message\RequestInterface;
+use GuzzleHttp\Psr7\Response;
+use GuzzleHttp\Psr7\Uri;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -62,7 +64,7 @@ class Client
      * @param string $secret
      * @param string $url
      */
-    public function __construct($id, $secret, $url)
+    public function __construct($id, $secret, $url, callable $handler = null)
     {
         $this->logger = new NullLogger();
 
@@ -79,11 +81,26 @@ class Client
         $this->secret = $secret;
         $this->baseUrl = $validatedUrl . '/page/api/';
 
-        $this->guzzleClient = new GuzzleClient(
-            [
-                'message_factory' => new MessageFactory()
-            ]
+        $handlerStack = HandlerStack::create();
+
+        if($handler){
+            $handlerStack->setHandler($handler);
+        }
+
+        $handlerStack->unshift(Middleware::mapRequest(
+            function (RequestInterface $request) {
+
+                $uri = Uri::withQueryValue($request->getUri(), 'api_id', $this->id);
+                $uri = Uri::withQueryValue($uri, 'api_ts', time());
+                $uri = Uri::withQueryValue($uri, 'api_ver', 2);
+                parse_str($uri->getQuery(), $query);
+                $hMac = $this->generateMac($uri, $query, $this->secret);
+                $uri = Uri::withQueryValue($uri, 'api_mac', $hMac);
+                return $request->withUri($uri);
+            })
         );
+
+        $this->guzzleClient = new GuzzleClient(['handler' => $handlerStack]);
     }
 
 
@@ -146,7 +163,7 @@ class Client
      * @param ResponseInterface $response
      * @return FutureResponse|Response|\GuzzleHttp\Message\ResponseInterface|\GuzzleHttp\Ring\Future\FutureInterface|null
      */
-    private function resolve(ResponseInterface $response)
+    private function resolve(Response $response)
     {
 
         // An HTTP status of 202 indicates that this request was deferred
@@ -245,4 +262,33 @@ class Client
         $this->guzzleClient->setDefaultOption($keyOrPath, $value);
         return $this;
     }
+
+    /**
+     * Creates a hash based on request parameters
+     *
+     * @param string $url
+     * @param array $query
+     * @param string $secret
+     * @return string
+     */
+    private function generateMac($url, $query, $secret)
+    {
+
+        // break URL into parts to get the path
+        $urlParts = parse_url($url);
+
+        // trim double slashes in the path
+        if (substr($urlParts['path'], 0, 2) == '//') {
+            $urlParts['path'] = substr($urlParts['path'], 1);
+        }
+
+        // combine strings to build the signing string
+        $signingString = $query['api_id'] . "\n" .
+            $query['api_ts'] . "\n" .
+            $urlParts['path'] . "\n" .
+            urldecode(http_build_query($query));
+
+        return hash_hmac('sha1', $signingString, $secret);
+    }
+
 }
